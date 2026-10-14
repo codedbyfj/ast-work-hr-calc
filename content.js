@@ -26,7 +26,6 @@
         isLoaded: false
     };
 
-
     const clockSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
 
     // Create Floating Widget Container
@@ -100,11 +99,13 @@
     trigger.addEventListener("mouseenter", () => {
         trigger.style.transform = "scale(1.03)";
         trigger.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.18)";
+        trigger.style.background = "#f8fafc";
     });
 
     trigger.addEventListener("mouseleave", () => {
         trigger.style.transform = "scale(1)";
         trigger.style.boxShadow = "0 4px 14px rgba(0, 0, 0, 0.12)";
+        trigger.style.background = "#FFF";
     });
 
     trigger.addEventListener("click", (e) => {
@@ -151,6 +152,7 @@
 
     function openCard() {
         cardVisible = true;
+        trigger.style.borderColor = "#94a3b8";
         card.style.display = "block";
         card.style.opacity = "0";
         card.style.transform = "scale(0.95)";
@@ -162,6 +164,7 @@
 
     function closeCard() {
         cardVisible = false;
+        trigger.style.borderColor = "#e2e8f0";
         card.style.opacity = "0";
         card.style.transform = "scale(0.95)";
         setTimeout(() => {
@@ -280,6 +283,7 @@
             localStorage.setItem("time_ended_at", time_completed_at);
 
             triggerText.innerText = remaining_time;
+            triggerText.style.color = "#0f172a";
 
             card.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -318,6 +322,7 @@
             let additional_time = ("00" + additional_hrs).substr(-2) + ":" + ("00" + additional_mins).substr(-2) + ":" + ("00" + current_date.getSeconds()).substr(-2);
 
             triggerText.innerText = `+${additional_time}`;
+            triggerText.style.color = "#16a34a";
 
             card.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -353,6 +358,7 @@
         const triggerText = document.getElementById("ast-whc-trigger-text");
         if (triggerText) {
             triggerText.innerText = "Not Checked In";
+            triggerText.style.color = "#64748b";
         }
         card.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -379,6 +385,7 @@
         const triggerText = document.getElementById("ast-whc-trigger-text");
         if (triggerText) {
             triggerText.innerText = "No Data";
+            triggerText.style.color = "#64748b";
         }
         card.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
