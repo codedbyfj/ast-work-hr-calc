@@ -1,33 +1,40 @@
 {
-  "author":"codecbyfj",
+  "author": "codecbyfj",
   "manifest_version": 3,
   "name": "Tracking Work Hours",
   "version": "1.0",
   "permissions": [
     "https://corp.arsenaltech.com/*"
   ],
-  "icons": { "16": "alarm-clock16.png",
+  "icons": {
+    "16": "alarm-clock16.png",
     "32": "alarm-clock32.png",
     "64": "alarm-clock64.png",
-   "128": "alarm-clock128.png" },
+    "128": "alarm-clock128.png"
+  },
   "content_scripts": [
     {
       "matches": [
-        "https://corp.arsenaltech.com/ems/timesheet/generate_detailed_report/*",
-        "http://corp.arsenaltech.com/ems/timesheet/generate_detailed_report/*"
+        "https://corp.arsenaltech.com/ems/*",
+        "http://corp.arsenaltech.com/ems/*"
       ],
-      "js": ["content.js"]
-    },
+      "js": [
+        "content.js"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
     {
-      "matches": [
-        "https://corp.arsenaltech.com/ems/welcome/dashboard/*",
-        "http://corp.arsenaltech.com/ems/welcome/dashboard/*",
-        "https://corp.arsenaltech.com/ems/timesheet/view_timesheet/*",
-        "http://corp.arsenaltech.com/ems/timesheet/view_timesheet/*",
-        "https://corp.arsenaltech.com/ems/timesheet/view_report/*",
-        "http://corp.arsenaltech.com/ems/timesheet/view_report/*"
+      "resources": [
+        "alarm-clock16.png",
+        "alarm-clock32.png",
+        "alarm-clock64.png",
+        "alarm-clock128.png"
       ],
-      "js": ["content_other_pages.js"]
+      "matches": [
+        "https://corp.arsenaltech.com/*",
+        "http://corp.arsenaltech.com/*"
+      ]
     }
   ]
 }
