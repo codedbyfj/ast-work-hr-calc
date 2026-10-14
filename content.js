@@ -2,6 +2,12 @@
 // Version 1.0
 
 (function () {
+    // Exclude welcome/index and welcome/password pages
+    const pathname = window.location.pathname.toLowerCase();
+    if (pathname.includes("/welcome/index") || pathname.includes("/welcome/password")) {
+        return;
+    }
+
     // Avoid double injection
     if (document.getElementById("ast-whc-container")) {
         return;
@@ -9,8 +15,16 @@
 
     const total_seconds = 59;
     let elapsed_time, remaining_time, leaving_time, hours, minutes, diff, startTime, total_time, current_time, date, current_date, second_ticks, time_completed_at;
-    let activeRow = null;
     let cardVisible = false;
+
+    // Structured data model
+    let timesheetData = {
+        dateStr: "",
+        in_time: "",
+        lunch_time: "",
+        break_time: "",
+        isLoaded: false
+    };
 
     // Get icon URL from extension
     let iconUrl = "";
@@ -27,12 +41,25 @@
     container.id = "ast-whc-container";
     container.style.cssText = `
         position: fixed;
-        bottom: 24px;
-        right: 24px;
+        bottom: 84px;
+        right: 20px;
         z-index: 2147483647;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         user-select: none;
+        transition: bottom 0.2s ease;
     `;
+
+    // Dynamic positioning above notification sticky button
+    function updatePosition() {
+        let sticky = document.querySelector(".notification-sticky, #notificationAjaxTrigger, .notificationAjaxTrigger, #notification-sticky");
+        if (sticky) {
+            let rect = sticky.getBoundingClientRect();
+            let bottomOffset = window.innerHeight - rect.top + 14;
+            container.style.bottom = Math.max(bottomOffset, 84) + "px";
+        } else {
+            container.style.bottom = "84px";
+        }
+    }
 
     // Popover Card
     const card = document.createElement("div");
@@ -75,7 +102,7 @@
     `;
 
     trigger.innerHTML = `
-        ${iconUrl ? `<img src="${iconUrl}" width="20" height="20" alt="Clock" style="display:block; flex-shrink:0;" onerror="this.style.display='none'" />` : clockSvg}
+        ${iconUrl ? `<img src="${iconUrl}" width="18" height="18" alt="Clock" style="display:block; flex-shrink:0; filter: brightness(0) invert(1);" onerror="this.style.display='none'" />` : clockSvg}
         <span id="ast-whc-trigger-text" style="font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.2px;">Calculating...</span>
     `;
 
@@ -110,11 +137,18 @@
     function injectContainer() {
         if (document.body) {
             document.body.appendChild(container);
+            updatePosition();
         } else {
-            document.addEventListener("DOMContentLoaded", () => document.body.appendChild(container));
+            document.addEventListener("DOMContentLoaded", () => {
+                document.body.appendChild(container);
+                updatePosition();
+            });
         }
     }
     injectContainer();
+
+    window.addEventListener("resize", updatePosition);
+    setInterval(updatePosition, 3000);
 
     function toggleCard() {
         if (cardVisible) {
@@ -146,20 +180,42 @@
         }, 150);
     }
 
+    // Load from cache on startup
+    function loadCachedTimesheet() {
+        try {
+            let cached = localStorage.getItem("ast_cached_timesheet");
+            if (cached) {
+                let parsed = JSON.parse(cached);
+                let today = new Date().toDateString();
+                if (parsed.savedDate === today && parsed.dateStr) {
+                    timesheetData = {
+                        dateStr: parsed.dateStr,
+                        in_time: parsed.in_time,
+                        lunch_time: parsed.lunch_time,
+                        break_time: parsed.break_time,
+                        isLoaded: true
+                    };
+                    renderUI();
+                }
+            }
+        } catch (e) {}
+    }
+    loadCachedTimesheet();
+
     // Time calculations
     function calculateTime() {
-        if (!activeRow) return false;
+        if (!timesheetData.isLoaded || !timesheetData.in_time) return false;
 
-        date = new Date(activeRow.getElementsByTagName("td")[1]?.innerText);
+        date = new Date(timesheetData.dateStr);
         current_date = new Date();
 
-        let in_time = activeRow.getElementsByTagName("td")[6]?.innerText?.trim();
+        let in_time = timesheetData.in_time.trim();
         if (!in_time || in_time === "-" || in_time === "") {
             return false;
         }
 
-        let break_time = activeRow.getElementsByTagName("td")[3]?.innerText || "0 min";
-        let lunch_time = activeRow.getElementsByTagName("td")[4]?.innerText || "0 min";
+        let break_time = timesheetData.break_time || "0 min";
+        let lunch_time = timesheetData.lunch_time || "0 min";
 
         let now_date = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
         let timeStart = new Date(now_date + " " + in_time);
@@ -198,12 +254,12 @@
         const triggerText = document.getElementById("ast-whc-trigger-text");
         if (!triggerText) return;
 
-        if (!activeRow) {
+        if (!timesheetData.isLoaded) {
             renderUnavailable();
             return;
         }
 
-        date = new Date(activeRow.getElementsByTagName("td")[1]?.innerText);
+        date = new Date(timesheetData.dateStr);
         current_date = new Date();
 
         let isToday = current_date.getDate() === date.getDate() &&
@@ -221,8 +277,8 @@
             return;
         }
 
-        let break_time = activeRow.getElementsByTagName("td")[3]?.innerText?.trim() || "";
-        let lunch_time = activeRow.getElementsByTagName("td")[4]?.innerText?.trim() || "";
+        let break_time = timesheetData.break_time ? timesheetData.break_time.trim() : "";
+        let lunch_time = timesheetData.lunch_time ? timesheetData.lunch_time.trim() : "";
 
         let hasBreak = break_time && break_time !== "-";
         let hasLunch = lunch_time && lunch_time !== "-";
@@ -397,32 +453,94 @@
         return time.join("");
     }
 
+    // Extract values safely using textContent or innerText (DOMParser compatibility)
+    function extractTimesheetFromRow(row) {
+        if (!row) return null;
+        let tds = row.getElementsByTagName("td");
+        if (!tds || tds.length < 7) return null;
+
+        let dateText = (tds[1]?.textContent || tds[1]?.innerText || "").trim();
+        let inTimeText = (tds[6]?.textContent || tds[6]?.innerText || "").trim();
+        let breakText = (tds[3]?.textContent || tds[3]?.innerText || "0 min").trim();
+        let lunchText = (tds[4]?.textContent || tds[4]?.innerText || "0 min").trim();
+
+        if (!dateText) return null;
+
+        return {
+            dateStr: dateText,
+            in_time: inTimeText,
+            lunch_time: lunchText,
+            break_time: breakText,
+            isLoaded: true
+        };
+    }
+
+    function saveTimesheetData(data) {
+        if (!data) return;
+        timesheetData = data;
+        try {
+            localStorage.setItem("ast_cached_timesheet", JSON.stringify({
+                dateStr: data.dateStr,
+                in_time: data.in_time,
+                lunch_time: data.lunch_time,
+                break_time: data.break_time,
+                savedDate: new Date().toDateString()
+            }));
+        } catch (e) {}
+        renderUI();
+    }
+
+    function getDetailedReportUrl() {
+        if (window.location.pathname.includes("generate_detailed_report")) {
+            try {
+                localStorage.setItem("ast_report_url", window.location.href);
+            } catch (e) {}
+            return window.location.href;
+        }
+
+        try {
+            let subNav = document.querySelector("#navType .subNav");
+            if (subNav) {
+                let lis = subNav.getElementsByTagName("li");
+                if (lis && lis[2]) {
+                    let navLink = lis[2].getElementsByTagName("a")[0];
+                    if (navLink && navLink.href && !navLink.href.includes("javascript")) {
+                        localStorage.setItem("ast_report_url", navLink.href);
+                        return navLink.href;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        let linkEls = document.querySelectorAll('a[href*="generate_detailed_report"]');
+        for (let el of linkEls) {
+            if (el.href && !el.href.includes("javascript") && el.href.startsWith("http")) {
+                localStorage.setItem("ast_report_url", el.href);
+                return el.href;
+            }
+        }
+
+        let cached = localStorage.getItem("ast_report_url");
+        if (cached) {
+            return cached;
+        }
+
+        return window.location.origin + "/ems/timesheet/generate_detailed_report/";
+    }
+
     // Initialize data fetching
     function fetchTimesheetData() {
         // If current page already has the timesheet table
         let localTable = document.getElementById("DataTables_Table_0") || document.querySelector(".table-bordered");
         if (localTable && localTable.getElementsByTagName("tr")[1]) {
-            activeRow = localTable.getElementsByTagName("tr")[1];
-            renderUI();
-            return;
-        }
-
-        // Otherwise fetch the detailed report page
-        let reportUrl = "";
-        try {
-            let subNav = document.querySelector("#navType .subNav");
-            if (subNav) {
-                let linkEl = subNav.getElementsByTagName("li")[2]?.getElementsByTagName("a")[0];
-                if (linkEl && linkEl.href) {
-                    reportUrl = linkEl.href;
-                }
+            let extracted = extractTimesheetFromRow(localTable.getElementsByTagName("tr")[1]);
+            if (extracted) {
+                saveTimesheetData(extracted);
+                return;
             }
-        } catch (e) {}
-
-        if (!reportUrl) {
-            reportUrl = window.location.origin + "/ems/timesheet/generate_detailed_report/";
         }
 
+        let reportUrl = getDetailedReportUrl();
         fetch(reportUrl)
             .then((r) => r.text())
             .then((html) => {
@@ -430,18 +548,31 @@
                 let doc = parser.parseFromString(html, "text/html");
                 let fetchedTable = doc.querySelector(".table-bordered") || doc.getElementById("DataTables_Table_0");
                 if (fetchedTable && fetchedTable.getElementsByTagName("tr")[1]) {
-                    activeRow = fetchedTable.getElementsByTagName("tr")[1];
-                    renderUI();
-                } else {
+                    let extracted = extractTimesheetFromRow(fetchedTable.getElementsByTagName("tr")[1]);
+                    if (extracted) {
+                        saveTimesheetData(extracted);
+                        return;
+                    }
+                }
+                if (!timesheetData.isLoaded) {
                     renderUnavailable();
                 }
             })
             .catch(() => {
-                renderUnavailable();
+                if (!timesheetData.isLoaded) {
+                    renderUnavailable();
+                }
             });
     }
 
     fetchTimesheetData();
+
+    // Retry fetch after 800ms in case navigation elements render asynchronously on Dashboard
+    setTimeout(() => {
+        if (!timesheetData.isLoaded) {
+            fetchTimesheetData();
+        }
+    }, 800);
 
     // Live update every second
     setInterval(() => {

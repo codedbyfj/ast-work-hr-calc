@@ -19,6 +19,12 @@
         "https://corp.arsenaltech.com/ems/*",
         "http://corp.arsenaltech.com/ems/*"
       ],
+      "exclude_matches": [
+        "https://corp.arsenaltech.com/ems/welcome/index*",
+        "http://corp.arsenaltech.com/ems/welcome/index*",
+        "https://corp.arsenaltech.com/ems/welcome/password*",
+        "http://corp.arsenaltech.com/ems/welcome/password*"
+      ],
       "js": [
         "content.js"
       ]
