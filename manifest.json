@@ -1,0 +1,33 @@
+{
+  "author":"ara",
+  "manifest_version": 3,
+  "name": "Tracking Hours",
+  "version": "0.4.1",
+  "permissions": [
+    "https://corp.arsenaltech.com/*"
+  ],
+  "icons": { "16": "alarm-clock16.png",
+    "32": "alarm-clock32.png",
+    "64": "alarm-clock64.png",
+   "128": "alarm-clock128.png" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://corp.arsenaltech.com/ems/timesheet/generate_detailed_report/*",
+        "http://corp.arsenaltech.com/ems/timesheet/generate_detailed_report/*"
+      ],
+      "js": ["content.js"]
+    },
+    {
+      "matches": [
+        "https://corp.arsenaltech.com/ems/welcome/dashboard/*",
+        "http://corp.arsenaltech.com/ems/welcome/dashboard/*",
+        "https://corp.arsenaltech.com/ems/timesheet/view_timesheet/*",
+        "http://corp.arsenaltech.com/ems/timesheet/view_timesheet/*",
+        "https://corp.arsenaltech.com/ems/timesheet/view_report/*",
+        "http://corp.arsenaltech.com/ems/timesheet/view_report/*"
+      ],
+      "js": ["content_other_pages.js"]
+    }
+  ]
+}
