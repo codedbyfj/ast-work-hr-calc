@@ -13,17 +13,6 @@ label.style.padding = "40px";
 label.className = "display_time";
 label.innerHTML = "";
 document.getElementById("contentHeader").appendChild(label);
-var button = document.createElement("BUTTON");
-var t = document.createTextNode("Current Week Hours");
-button.appendChild(t);
-button.id = "hours_weekly";
-button.style.float = "right";
-button.style.marginTop = "43px";
-button.style.marginRight = "-4px";
-button.style.padding = "6px 7px 5px 6px";
-button.style.borderRadius = "4px";
-button.style.background = "#fff";
-document.getElementById("contentHeader").appendChild(button);
 // main function
 function displayTime() {
     date = new Date(row.getElementsByTagName("td")[1].innerText);
@@ -33,17 +22,10 @@ function displayTime() {
     var el = x.querySelector('.display_time');
 
     if (current_date.getDate() == date.getDate() && current_date.getMonth() == date.getMonth() && current_date.getFullYear() == date.getFullYear()) {
-        // for version0.3.2 [time provisioning]
-        // let in_time = row.getElementsByTagName("td")[6].innerText;
-        // let name = (row.getElementsByTagName("td")[0].innerText).split(" ")[0];
         if (remaining_time.split(":")[0] >= 0) {
             time_completed_at = tConvert(leaving_time);
             localStorage.setItem("time_ended_at", time_completed_at);
             el.innerHTML = `<span style = "font-size:12px;"> <b>Time Left : </b> ${remaining_time} </span>` + `<span style = "font-size:14px; color:#424d42;"><br/><b>Completes at :  ${tConvert(leaving_time)}</b></span>`; // replacing updated time
-            // for version0.3.2 [time provisioning]
-            // if(in_time.split(":")[0] < 9){
-            //     el.innerHTML += `<span style = "font-size:12px;"><br/> <b>${name}</b> nice to see you early. But, your time will be considered from <b>09:00 AM</b> </span>`;
-            // }
         } else {
             let time_ended_at;
             if (time_completed_at != undefined && time_completed_at != "undefined" && time_completed_at != null && time_completed_at != "null") {
@@ -58,16 +40,10 @@ function displayTime() {
             let additional_mins = (Math.abs(remaining_time.split(":")[1]) - 1);
             let additional_time = (("00" + additional_hrs).substr(-2) + ":" + ("00" + additional_mins).substr(-2) + ":" + ("00" + current_date.getSeconds()).substr(-2));
             el.style.padding = "43px";
-            
+
             el.innerHTML = `<span style = "font-size:12px;"><b>Completed at :  ${time_ended_at}</b> </span>` + `<span style = "font-size:14px; color:#424d42;"><br/><b>Additional Time : </b> ${additional_time} </span>`; // replacing updated time
-            // for version0.3.2 [time provisioning]
-            // if(in_time.split(":")[0] < 9){
-            //     el.innerHTML += `<span style = "font-size:12px;"><br/><b> ${name}</b> nice to see you early. But, your time will be considered from <b>09:00 AM</b> </span>`;
-            // }
         }
     } else {
-        // console.log("Today's Entry not available");
-        button.style.marginTop = "38px";
         el.innerHTML = `<span style = "font-size:14px;">Today's data isn't available.</span>`;
         localStorage.removeItem("time_ended_at");
     }
@@ -84,23 +60,15 @@ function calculate_time() {
     current_date = new Date();
 
     let in_time = row.getElementsByTagName("td")[6].innerText;
-
-    // FOR TIME PROVISIONING // for version0.3.2 [time provisioning]
-    // if(in_time.split(":")[0] < 9){
-    //     in_time = "09:00 am"
-    // }
     let break_time = row.getElementsByTagName("td")[3].innerText;
     let lunch_time = row.getElementsByTagName("td")[4].innerText;
     let now_date = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear()
     let timeStart = new Date(now_date + " " + in_time);
 
     diff = (current_date - timeStart) / 60000;
-    // console.log("diff >>>", diff);
     minutes = diff % 60;
 
     hours = (diff - minutes) / 60;
-    // console.log("hrs -->", hours);
-    // console.log("mins -->", minutes);
     if (lunch_time.split("hrs").length == 2) {
         let lunch_hr_val = lunch_time.split("hrs")[0]
         let lunch_min_val = lunch_time.split("hrs")[1].split("min")[0];
@@ -117,64 +85,13 @@ function calculate_time() {
         break_time = (break_time.trim() != "" && break_time.trim() != "-" && break_time.trim() != null) ? +(break_time.replace("min", "")) : 0
     }
     total_time = lunch_time + break_time
-    // console.log("total_time --->",total_time);
     startTime = converToMinutes(hours + "." + minutes);
     elapsed_time = parseTime(startTime - total_time, current_date.getSeconds());
-    // console.log("elapsed_time --->", elapsed_time);
     second_ticks = total_seconds - current_date.getSeconds();
     remaining_time = time_diff("08:01:00", elapsed_time, second_ticks);
-    // console.log("remaining_time --->", remaining_time);
     current_time = current_date.getHours() + ":" + current_date.getMinutes() + ":" + current_date.getSeconds()
     leaving_time = addTime(remaining_time, current_time)
-    // console.log("leaving_time --->", leaving_time);
 }
-
-
-// weekly calculations
-document.getElementById("hours_weekly").addEventListener("click", function () {
-    var working_hrs = [];
-    var rowLength = table_data.rows.length;
-    var start_day = get_days().startday;
-    var end_day = get_days().endday;
-    var s_day = start_day.getDate();
-    var e_day = end_day.getDate();
-    //loops through rows
-    for (i = 1; i < rowLength; i++) {
-        //gets cells of current row
-        var oCells = table_data.rows.item(i).cells;
-        //gets amount of cells of current row
-        var table_date_today = oCells.item(1).innerHTML;
-
-        let day = new Date(table_date_today).getDate();
-        let month = new Date(table_date_today).getMonth();
-        if (end_day.getMonth() > month) {
-            e_day = 31;
-        }
-        if ((s_day <= day && day <= e_day) && (month == start_day.getMonth() || month == end_day.getMonth())) {
-            working_hrs.push((oCells.item(5).innerHTML).trim());
-        }
-    }
-    if (working_hrs.length > 0) {
-        let total_hrs = 0;
-        for (j = 0; j < working_hrs.length; j++) {
-            if (working_hrs[j] == "-") {
-                working_hrs[j] = 0;
-            } else {
-                let split_hrs = working_hrs[j].split("hrs")[0];
-                let split_mins = (working_hrs[j].split("hrs")[1]).split("min")[0];
-                split_mins = (split_mins > 0) ? split_mins : "00"
-                total_hrs += converToMinutes(split_hrs + "." + split_mins.trim())
-            }
-        }
-        if (total_hrs > 0) {
-            alert(`Total : ${timeConvert(total_hrs)} \n\n Note: Re-evaluation after removing filters might result in proper output if not getting proper result.`);
-        } else {
-            alert(`Data Inappropriate \n\n Note: Re-evaluation after removing filters might result in proper output if not getting proper result.`);
-        }
-    } else {
-        alert("No data available. \n\n Note: Re-evaluation after removing filters might result in proper output if not getting proper result.");
-    }
-});
 
 function converToMinutes(s) {
     var c = s.split('.');
@@ -222,23 +139,4 @@ function tConvert(time) {
         time[0] = +time[0] % 12 || 12; // Adjust hours
     }
     return time.join(''); // return adjusted time or original string
-}
-
-function get_days() {
-    var today, todayNumber, mondayNumber, sundayNumber, monday, sunday;
-    today = new Date();
-    todayNumber = today.getDay();
-    mondayNumber = 1 - todayNumber;
-    sundayNumber = 7 - todayNumber;
-    monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + mondayNumber);
-    sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + sundayNumber);
-    return ({ startday: monday, endday: sunday })
-}
-function timeConvert(n) {
-    var num = n;
-    var hours = (num / 60);
-    var rhours = Math.floor(hours);
-    var minutes = (hours - rhours) * 60;
-    var rminutes = Math.round(minutes);
-    return rhours + " hour(s) and " + rminutes + " minute(s).";
 }
