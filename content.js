@@ -26,13 +26,6 @@
         isLoaded: false
     };
 
-    // Get icon URL from extension
-    let iconUrl = "";
-    try {
-        iconUrl = chrome.runtime.getURL("alarm-clock32.png");
-    } catch (e) {
-        iconUrl = "";
-    }
 
     const clockSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
 
@@ -89,31 +82,29 @@
     trigger.style.cssText = `
         display: flex;
         align-items: center;
-        gap: 8px;
-        background: #0f172a;
-        color: #ffffff;
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: #FFF;
+        color: #0f172a;
+        border: 1px solid #e2e8f0;
         border-radius: 9999px;
-        padding: 8px 14px 8px 10px;
+        padding: 8px 16px;
         cursor: pointer;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
         outline: none;
         transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     `;
 
     trigger.innerHTML = `
-        ${iconUrl ? `<img src="${iconUrl}" width="18" height="18" alt="Clock" style="display:block; flex-shrink:0; filter: brightness(0) invert(1);" onerror="this.style.display='none'" />` : clockSvg}
         <span id="ast-whc-trigger-text" style="font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.2px;">Calculating...</span>
     `;
 
     trigger.addEventListener("mouseenter", () => {
         trigger.style.transform = "scale(1.03)";
-        trigger.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.3)";
+        trigger.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.18)";
     });
 
     trigger.addEventListener("mouseleave", () => {
         trigger.style.transform = "scale(1)";
-        trigger.style.boxShadow = "0 4px 14px rgba(0, 0, 0, 0.22)";
+        trigger.style.boxShadow = "0 4px 14px rgba(0, 0, 0, 0.12)";
     });
 
     trigger.addEventListener("click", (e) => {
