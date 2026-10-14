@@ -148,17 +148,24 @@
 
     // Time calculations
     function calculateTime() {
-        if (!activeRow) return;
+        if (!activeRow) return false;
 
         date = new Date(activeRow.getElementsByTagName("td")[1]?.innerText);
         current_date = new Date();
 
-        let in_time = activeRow.getElementsByTagName("td")[6]?.innerText;
+        let in_time = activeRow.getElementsByTagName("td")[6]?.innerText?.trim();
+        if (!in_time || in_time === "-" || in_time === "") {
+            return false;
+        }
+
         let break_time = activeRow.getElementsByTagName("td")[3]?.innerText || "0 min";
         let lunch_time = activeRow.getElementsByTagName("td")[4]?.innerText || "0 min";
 
         let now_date = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
         let timeStart = new Date(now_date + " " + in_time);
+        if (isNaN(timeStart.getTime())) {
+            return false;
+        }
 
         diff = (current_date - timeStart) / 60000;
         minutes = diff % 60;
@@ -174,6 +181,7 @@
         remaining_time = time_diff("08:01:00", elapsed_time, second_ticks);
         current_time = current_date.getHours() + ":" + current_date.getMinutes() + ":" + current_date.getSeconds();
         leaving_time = addTime(remaining_time, current_time);
+        return true;
     }
 
     function parseDuration(val) {
@@ -207,7 +215,11 @@
             return;
         }
 
-        calculateTime();
+        let hasCalculated = calculateTime();
+        if (!hasCalculated) {
+            renderNotCheckedIn();
+            return;
+        }
 
         let break_time = activeRow.getElementsByTagName("td")[3]?.innerText?.trim() || "";
         let lunch_time = activeRow.getElementsByTagName("td")[4]?.innerText?.trim() || "";
@@ -290,6 +302,32 @@
         }
     }
 
+    function renderNotCheckedIn() {
+        const triggerText = document.getElementById("ast-whc-trigger-text");
+        if (triggerText) {
+            triggerText.innerText = "Not Checked In";
+        }
+        card.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    ${clockSvg}
+                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Work Hours</span>
+                </div>
+                <button id="ast-whc-close-btn" type="button" style="background: none; border: none; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px;">&times;</button>
+            </div>
+            <div style="padding: 16px 8px; text-align: center; color: #64748b; font-size: 13px;">
+                You haven't checked in yet for today.
+            </div>
+        `;
+        const closeBtn = document.getElementById("ast-whc-close-btn");
+        if (closeBtn) {
+            closeBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                closeCard();
+            });
+        }
+    }
+
     function renderUnavailable() {
         const triggerText = document.getElementById("ast-whc-trigger-text");
         if (triggerText) {
@@ -350,7 +388,7 @@
     }
 
     function tConvert(time) {
-        time = time.toString().match(/^([01]\d|2[0-3])(:)([0-5]\d)(:[0-5]\d)?$/) || [time];
+        time = time.toString().match(/^([0-1]?\d|2[0-3])(:)([0-5]\d)(:[0-5]\d)?$/) || [time];
         if (time.length > 1) {
             time = time.slice(1);
             time[5] = +time[0] < 12 ? " AM" : " PM";
