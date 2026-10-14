@@ -13,8 +13,6 @@
         return;
     }
 
-    const total_seconds = 59;
-    let elapsed_time, remaining_time, leaving_time, hours, minutes, diff, startTime, total_time, current_time, date, current_date, second_ticks, time_completed_at;
     let cardVisible = false;
 
     // Structured data model
@@ -72,6 +70,22 @@
         transform-origin: bottom right;
         transition: opacity 0.15s ease, transform 0.15s ease;
     `;
+    card.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                ${clockSvg}
+                <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Work Hours</span>
+            </div>
+            <button id="ast-whc-close-btn" type="button" style="background: none; border: none; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px;">&times;</button>
+        </div>
+        <div id="ast-whc-card-body"></div>
+    `;
+
+    const cardBody = card.querySelector("#ast-whc-card-body");
+    card.querySelector("#ast-whc-close-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeCard();
+    });
 
     // Floating Trigger Button
     const trigger = document.createElement("button");
@@ -198,14 +212,14 @@
 
     // Time calculations
     function calculateTime() {
-        if (!timesheetData.isLoaded || !timesheetData.in_time) return false;
+        if (!timesheetData.isLoaded || !timesheetData.in_time) return null;
 
-        date = new Date(timesheetData.dateStr);
-        current_date = new Date();
+        let date = new Date(timesheetData.dateStr);
+        let current_date = new Date();
 
         let in_time = timesheetData.in_time.trim();
         if (!in_time || in_time === "-" || in_time === "") {
-            return false;
+            return null;
         }
 
         let break_time = timesheetData.break_time || "0 min";
@@ -214,34 +228,36 @@
         let now_date = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
         let timeStart = new Date(now_date + " " + in_time);
         if (isNaN(timeStart.getTime())) {
-            return false;
+            return null;
         }
 
-        diff = (current_date - timeStart) / 60000;
-        minutes = diff % 60;
-        hours = (diff - minutes) / 60;
+        let diff = (current_date - timeStart) / 60000;
+        let minutes = diff % 60;
+        let hours = (diff - minutes) / 60;
 
         let parsedLunch = parseDuration(lunch_time);
         let parsedBreak = parseDuration(break_time);
 
-        total_time = parsedLunch + parsedBreak;
-        startTime = converToMinutes(hours + "." + minutes);
-        elapsed_time = parseTime(startTime - total_time, current_date.getSeconds());
-        second_ticks = total_seconds - current_date.getSeconds();
-        remaining_time = time_diff("08:01:00", elapsed_time, second_ticks);
-        current_time = current_date.getHours() + ":" + current_date.getMinutes() + ":" + current_date.getSeconds();
-        leaving_time = addTime(remaining_time, current_time);
-        return true;
+        let total_time = parsedLunch + parsedBreak;
+        let startTime = hours * 60 + minutes;
+        let elapsed_time = parseTime(startTime - total_time, current_date.getSeconds());
+        let second_ticks = 59 - current_date.getSeconds();
+        let remaining_time = time_diff("08:01:00", elapsed_time, second_ticks);
+        let current_time = current_date.getHours() + ":" + current_date.getMinutes() + ":" + current_date.getSeconds();
+        let leaving_time = addTime(remaining_time, current_time);
+        return { remaining_time, leaving_time, current_date };
     }
 
     function parseDuration(val) {
         if (!val || val.trim() === "-" || val.trim() === "") return 0;
-        if (val.split("hrs").length === 2) {
-            let hr = val.split("hrs")[0];
-            let min = val.split("hrs")[1].split("min")[0];
-            return converToMinutes(hr + "." + min);
+        let hrsMatch = val.match(/(\d+)\s*hrs?/);
+        let minMatch = val.match(/(\d+)\s*min/);
+        let hrs = hrsMatch ? parseInt(hrsMatch[1], 10) : 0;
+        let mins = minMatch ? parseInt(minMatch[1], 10) : 0;
+        if (!hrsMatch && !minMatch) {
+            return parseInt(val, 10) || 0;
         }
-        return +(val.replace("min", "").trim()) || 0;
+        return hrs * 60 + mins;
     }
 
     function renderUI() {
@@ -253,20 +269,16 @@
             return;
         }
 
-        date = new Date(timesheetData.dateStr);
-        current_date = new Date();
+        let date = new Date(timesheetData.dateStr);
+        let current_date = new Date();
 
-        let isToday = current_date.getDate() === date.getDate() &&
-                      current_date.getMonth() === date.getMonth() &&
-                      current_date.getFullYear() === date.getFullYear();
-
-        if (!isToday) {
+        if (current_date.toDateString() !== date.toDateString()) {
             renderUnavailable();
             return;
         }
 
-        let hasCalculated = calculateTime();
-        if (!hasCalculated) {
+        let calc = calculateTime();
+        if (!calc) {
             renderNotCheckedIn();
             return;
         }
@@ -277,25 +289,18 @@
         let hasBreak = break_time && break_time !== "-";
         let hasLunch = lunch_time && lunch_time !== "-";
 
-        if (remaining_time.split(":")[0] >= 0) {
+        if (calc.remaining_time.split(":")[0] >= 0) {
             // In progress
-            time_completed_at = tConvert(leaving_time);
+            let time_completed_at = tConvert(calc.leaving_time);
             localStorage.setItem("time_ended_at", time_completed_at);
 
-            triggerText.innerText = remaining_time;
+            triggerText.innerText = calc.remaining_time;
             triggerText.style.color = "#0f172a";
 
-            card.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        ${clockSvg}
-                        <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Work Hours</span>
-                    </div>
-                    <button id="ast-whc-close-btn" type="button" style="background: none; border: none; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px;">&times;</button>
-                </div>
+            cardBody.innerHTML = `
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 12px;">
                     <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Time Left</div>
-                    <div style="font-size: 26px; font-weight: 700; color: #0f172a; font-family: monospace, sans-serif; letter-spacing: 0.5px; margin-top: 2px;">${remaining_time}</div>
+                    <div style="font-size: 26px; font-weight: 700; color: #0f172a; font-family: monospace, sans-serif; letter-spacing: 0.5px; margin-top: 2px;">${calc.remaining_time}</div>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #334155; margin-bottom: ${hasLunch || hasBreak ? "12px" : "4px"}; padding: 0 4px;">
                     <span style="color: #64748b;">Completes at</span>
@@ -309,29 +314,16 @@
             `;
         } else {
             // Completed / Overtime
-            let time_ended_at;
-            if (time_completed_at != null && time_completed_at !== "undefined" && time_completed_at !== "null") {
-                time_ended_at = time_completed_at;
-                localStorage.setItem("time_ended_at", time_completed_at);
-            } else {
-                time_ended_at = localStorage.getItem("time_ended_at") || "Completed";
-            }
+            let time_ended_at = localStorage.getItem("time_ended_at") || "Completed";
 
-            let additional_hrs = Math.abs(remaining_time.split(":")[0]) - 1;
-            let additional_mins = Math.abs(remaining_time.split(":")[1]) - 1;
-            let additional_time = ("00" + additional_hrs).substr(-2) + ":" + ("00" + additional_mins).substr(-2) + ":" + ("00" + current_date.getSeconds()).substr(-2);
+            let additional_hrs = Math.abs(calc.remaining_time.split(":")[0]) - 1;
+            let additional_mins = Math.abs(calc.remaining_time.split(":")[1]) - 1;
+            let additional_time = String(additional_hrs).padStart(2, "0") + ":" + String(additional_mins).padStart(2, "0") + ":" + String(calc.current_date.getSeconds()).padStart(2, "0");
 
             triggerText.innerText = `+${additional_time}`;
             triggerText.style.color = "#16a34a";
 
-            card.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        ${clockSvg}
-                        <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Work Hours</span>
-                    </div>
-                    <button id="ast-whc-close-btn" type="button" style="background: none; border: none; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px;">&times;</button>
-                </div>
+            cardBody.innerHTML = `
                 <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 12px;">
                     <div style="font-size: 11px; font-weight: 600; color: #16a34a; text-transform: uppercase; letter-spacing: 0.5px;">Completed at ${time_ended_at}</div>
                     <div style="font-size: 24px; font-weight: 700; color: #15803d; font-family: monospace, sans-serif; letter-spacing: 0.5px; margin-top: 2px;">+${additional_time}</div>
@@ -344,14 +336,6 @@
                 </div>` : ""}
             `;
         }
-
-        const closeBtn = document.getElementById("ast-whc-close-btn");
-        if (closeBtn) {
-            closeBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                closeCard();
-            });
-        }
     }
 
     function renderNotCheckedIn() {
@@ -360,25 +344,11 @@
             triggerText.innerText = "Not Checked In";
             triggerText.style.color = "#64748b";
         }
-        card.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                    ${clockSvg}
-                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Work Hours</span>
-                </div>
-                <button id="ast-whc-close-btn" type="button" style="background: none; border: none; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px;">&times;</button>
-            </div>
+        cardBody.innerHTML = `
             <div style="padding: 16px 8px; text-align: center; color: #64748b; font-size: 13px;">
                 You haven't checked in yet for today.
             </div>
         `;
-        const closeBtn = document.getElementById("ast-whc-close-btn");
-        if (closeBtn) {
-            closeBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                closeCard();
-            });
-        }
     }
 
     function renderUnavailable() {
@@ -387,30 +357,11 @@
             triggerText.innerText = "No Data";
             triggerText.style.color = "#64748b";
         }
-        card.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                    ${clockSvg}
-                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Work Hours</span>
-                </div>
-                <button id="ast-whc-close-btn" type="button" style="background: none; border: none; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px;">&times;</button>
-            </div>
+        cardBody.innerHTML = `
             <div style="padding: 16px 8px; text-align: center; color: #64748b; font-size: 13px;">
                 Today's timesheet data isn't available yet.
             </div>
         `;
-        const closeBtn = document.getElementById("ast-whc-close-btn");
-        if (closeBtn) {
-            closeBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                closeCard();
-            });
-        }
-    }
-
-    function converToMinutes(s) {
-        var c = s.split(".");
-        return parseInt(c[0]) * 60 + parseInt(c[1]);
     }
 
     function parseTime(s, sec) {
@@ -438,7 +389,7 @@
 
         var hour = Math.floor((t1cm - t2cm) / 60);
         var min = Math.floor((t1cm - t2cm) % 60);
-        return ("00" + hour).substr(-2) + ":" + ("00" + min).substr(-2) + ":" + ("00" + sec).substr(-2);
+        return String(hour).padStart(2, "0") + ":" + String(min).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
     }
 
     function tConvert(time) {
@@ -457,10 +408,10 @@
         let tds = row.getElementsByTagName("td");
         if (!tds || tds.length < 7) return null;
 
-        let dateText = (tds[1]?.textContent || tds[1]?.innerText || "").trim();
-        let inTimeText = (tds[6]?.textContent || tds[6]?.innerText || "").trim();
-        let breakText = (tds[3]?.textContent || tds[3]?.innerText || "0 min").trim();
-        let lunchText = (tds[4]?.textContent || tds[4]?.innerText || "0 min").trim();
+        let dateText = tds[1]?.textContent?.trim() || "";
+        let inTimeText = tds[6]?.textContent?.trim() || "";
+        let breakText = tds[3]?.textContent?.trim() || "0 min";
+        let lunchText = tds[4]?.textContent?.trim() || "0 min";
 
         if (!dateText) return null;
 
@@ -496,26 +447,12 @@
             return window.location.href;
         }
 
-        try {
-            let subNav = document.querySelector("#navType .subNav");
-            if (subNav) {
-                let lis = subNav.getElementsByTagName("li");
-                if (lis && lis[2]) {
-                    let navLink = lis[2].getElementsByTagName("a")[0];
-                    if (navLink && navLink.href && !navLink.href.includes("javascript")) {
-                        localStorage.setItem("ast_report_url", navLink.href);
-                        return navLink.href;
-                    }
-                }
-            }
-        } catch (e) {}
-
-        let linkEls = document.querySelectorAll('a[href*="generate_detailed_report"]');
-        for (let el of linkEls) {
-            if (el.href && !el.href.includes("javascript") && el.href.startsWith("http")) {
-                localStorage.setItem("ast_report_url", el.href);
-                return el.href;
-            }
+        let linkEl = document.querySelector('a[href*="generate_detailed_report"]');
+        if (linkEl && linkEl.href && !linkEl.href.includes("javascript") && linkEl.href.startsWith("http")) {
+            try {
+                localStorage.setItem("ast_report_url", linkEl.href);
+            } catch (e) {}
+            return linkEl.href;
         }
 
         let cached = localStorage.getItem("ast_report_url");

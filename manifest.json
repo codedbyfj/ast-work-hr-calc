@@ -29,19 +29,5 @@
         "content.js"
       ]
     }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "alarm-clock16.png",
-        "alarm-clock32.png",
-        "alarm-clock64.png",
-        "alarm-clock128.png"
-      ],
-      "matches": [
-        "https://corp.arsenaltech.com/*",
-        "http://corp.arsenaltech.com/*"
-      ]
-    }
   ]
 }
