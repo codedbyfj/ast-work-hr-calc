@@ -1,8 +1,8 @@
 {
-  "author":"ara",
+  "author":"codecbyfj",
   "manifest_version": 3,
-  "name": "Tracking Hours",
-  "version": "0.4.1",
+  "name": "Tracking Work Hours",
+  "version": "1.0",
   "permissions": [
     "https://corp.arsenaltech.com/*"
   ],
