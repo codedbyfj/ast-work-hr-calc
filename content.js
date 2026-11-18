@@ -1,5 +1,5 @@
 // Tracking Work Hours Extension - Floating Widget
-// Version 1.0
+// Version 1.1
 
 (function () {
     // Exclude welcome/index and welcome/password pages
@@ -210,15 +210,21 @@
     }
     loadCachedTimesheet();
 
+    // Helper to check if a value is empty, whitespace, or a placeholder dash (-, –, —)
+    function isEmptyValue(val) {
+        return !val || /^[–—\-\s]*$/.test(val);
+    }
+
     // Time calculations
     function calculateTime() {
         if (!timesheetData.isLoaded || !timesheetData.in_time) return null;
 
-        let date = new Date(timesheetData.dateStr);
+        let date = parseDateString(timesheetData.dateStr);
+        if (!date) return null;
         let current_date = new Date();
 
         let in_time = timesheetData.in_time.trim();
-        if (!in_time || in_time === "-" || in_time === "") {
+        if (isEmptyValue(in_time)) {
             return null;
         }
 
@@ -249,11 +255,13 @@
     }
 
     function parseDuration(val) {
-        if (!val || val.trim() === "-" || val.trim() === "") return 0;
-        let hrsMatch = val.match(/(\d+)\s*hrs?/);
-        let minMatch = val.match(/(\d+)\s*min/);
+        if (isEmptyValue(val)) return 0;
+
+        let hrsMatch = val.match(/(\d+)\s*h(?:rs?|ours?)?/i);
+        let minMatch = val.match(/(\d+)\s*m(?:in(?:ute)?s?)?/i);
         let hrs = hrsMatch ? parseInt(hrsMatch[1], 10) : 0;
         let mins = minMatch ? parseInt(minMatch[1], 10) : 0;
+
         if (!hrsMatch && !minMatch) {
             return parseInt(val, 10) || 0;
         }
@@ -269,10 +277,10 @@
             return;
         }
 
-        let date = new Date(timesheetData.dateStr);
+        let date = parseDateString(timesheetData.dateStr);
         let current_date = new Date();
 
-        if (current_date.toDateString() !== date.toDateString()) {
+        if (!date || current_date.toDateString() !== date.toDateString()) {
             renderUnavailable();
             return;
         }
@@ -286,8 +294,8 @@
         let break_time = timesheetData.break_time ? timesheetData.break_time.trim() : "";
         let lunch_time = timesheetData.lunch_time ? timesheetData.lunch_time.trim() : "";
 
-        let hasBreak = break_time && break_time !== "-";
-        let hasLunch = lunch_time && lunch_time !== "-";
+        let hasBreak = !isEmptyValue(break_time);
+        let hasLunch = !isEmptyValue(lunch_time);
 
         if (calc.remaining_time.split(":")[0] >= 0) {
             // In progress
@@ -402,26 +410,164 @@
         return time.join("");
     }
 
+    function parseDateString(str) {
+        if (!str) return null;
+        let cleaned = str.replace(/,/g, " ").trim();
+        let d = new Date(cleaned);
+        if (!isNaN(d.getTime())) return d;
+
+        let parts = cleaned.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+        if (parts) {
+            let day = parseInt(parts[1], 10);
+            let month = parseInt(parts[2], 10) - 1;
+            let year = parseInt(parts[3], 10);
+            let parsed = new Date(year, month, day);
+            if (!isNaN(parsed.getTime())) return parsed;
+        }
+        return null;
+    }
+
+    function isTodayDate(dateText) {
+        let d = parseDateString(dateText);
+        if (!d) return false;
+        let today = new Date();
+        return (
+            d.getDate() === today.getDate() &&
+            d.getMonth() === today.getMonth() &&
+            d.getFullYear() === today.getFullYear()
+        );
+    }
+
+    function getTableColumnMap(table) {
+        if (!table) return null;
+
+        let headerRow = table.querySelector("thead tr");
+        if (!headerRow) {
+            let rows = table.getElementsByTagName("tr");
+            for (let r of rows) {
+                if (r.getElementsByTagName("th").length > 0) {
+                    headerRow = r;
+                    break;
+                }
+            }
+            if (!headerRow && rows.length > 0) {
+                headerRow = rows[0];
+            }
+        }
+        if (!headerRow) return null;
+
+        let cells = headerRow.querySelectorAll("th, td");
+        if (!cells || cells.length === 0) return null;
+
+        let colMap = { date: -1, in: -1, break: -1, lunch: -1 };
+
+        cells.forEach((cell, idx) => {
+            let text = cell.textContent.trim().toLowerCase();
+            if (colMap.date === -1 && /\bdate\b/i.test(text)) {
+                colMap.date = idx;
+            } else if (
+                colMap.in === -1 &&
+                (/^in$/i.test(text) || /\b(?:punch|check)?[-\s]*in(?:[-\s]*time)?\b/i.test(text)) &&
+                !/login|location|working/i.test(text)
+            ) {
+                colMap.in = idx;
+            } else if (colMap.break === -1 && /\bbreak\b/i.test(text)) {
+                colMap.break = idx;
+            } else if (colMap.lunch === -1 && /\blunch\b/i.test(text)) {
+                colMap.lunch = idx;
+            }
+        });
+
+        return colMap;
+    }
+
     // Extract values safely using textContent or innerText (DOMParser compatibility)
-    function extractTimesheetFromRow(row) {
+    function extractTimesheetFromRow(row, colMap) {
         if (!row) return null;
         let tds = row.getElementsByTagName("td");
-        if (!tds || tds.length < 7) return null;
+        if (!tds || tds.length === 0) return null;
 
-        let dateText = tds[1]?.textContent?.trim() || "";
-        let inTimeText = tds[6]?.textContent?.trim() || "";
-        let breakText = tds[3]?.textContent?.trim() || "0 min";
-        let lunchText = tds[4]?.textContent?.trim() || "0 min";
+        let dateIdx = colMap && colMap.date >= 0 ? colMap.date : 1;
+        let inIdx = colMap && colMap.in >= 0 ? colMap.in : 6;
+        let breakIdx = colMap && colMap.break >= 0 ? colMap.break : 3;
+        let lunchIdx = colMap && colMap.lunch >= 0 ? colMap.lunch : 4;
+
+        if (tds.length <= Math.max(dateIdx, inIdx)) return null;
+
+        let dateText = tds[dateIdx]?.textContent?.trim() || "";
+        let inTimeText = tds[inIdx]?.textContent?.trim() || "";
+        let breakText = (breakIdx >= 0 && tds[breakIdx]) ? tds[breakIdx].textContent.trim() : "0 min";
+        let lunchText = (lunchIdx >= 0 && tds[lunchIdx]) ? tds[lunchIdx].textContent.trim() : "0 min";
 
         if (!dateText) return null;
 
         return {
-            dateStr: dateText,
+            dateStr: dateText.replace(/,/g, " ").trim(),
             in_time: inTimeText,
-            lunch_time: lunchText,
-            break_time: breakText,
+            lunch_time: lunchText || "0 min",
+            break_time: breakText || "0 min",
             isLoaded: true
         };
+    }
+
+    function extractTimesheetFromTable(table) {
+        if (!table) return null;
+        let colMap = getTableColumnMap(table);
+
+        let rows = table.querySelectorAll("tbody tr");
+        if (!rows || rows.length === 0) {
+            let allRows = table.getElementsByTagName("tr");
+            if (allRows && allRows.length > 1) {
+                rows = Array.from(allRows).slice(1);
+            }
+        }
+        if (!rows || rows.length === 0) return null;
+
+        let dateIdx = colMap && colMap.date >= 0 ? colMap.date : 1;
+
+        // 1. Search for row matching today's date
+        for (let row of rows) {
+            let tds = row.getElementsByTagName("td");
+            if (tds && tds.length > dateIdx) {
+                let dateText = tds[dateIdx]?.textContent?.trim() || "";
+                if (isTodayDate(dateText)) {
+                    return extractTimesheetFromRow(row, colMap);
+                }
+            }
+        }
+
+        // 2. Fall back to first valid data row
+        for (let row of rows) {
+            let extracted = extractTimesheetFromRow(row, colMap);
+            if (extracted) return extracted;
+        }
+
+        return null;
+    }
+
+    function findTimesheetTable(root) {
+        if (!root) return null;
+
+        let tables = root.querySelectorAll("table");
+
+        // Dynamic Header-based Discovery: table containing Date & In columns
+        for (let table of tables) {
+            let colMap = getTableColumnMap(table);
+            if (colMap && colMap.date !== -1 && colMap.in !== -1) {
+                return table;
+            }
+        }
+
+        // Fallback for legacy pages without explicit header tags: table with >= 7 columns
+        for (let table of tables) {
+            let ths = table.querySelectorAll("th");
+            let tds = table.querySelectorAll("td");
+            if (ths.length >= 7 || tds.length >= 7) {
+                return table;
+            }
+        }
+
+        return null;
     }
 
     function saveTimesheetData(data) {
@@ -460,15 +606,23 @@
             return cached;
         }
 
-        return window.location.origin + "/ems/timesheet/generate_detailed_report/";
+        return window.location.origin + "/ems/timesheet/view_report/";
+    }
+
+    function tryExtractFromHtml(html) {
+        let parser = new DOMParser();
+        let doc = parser.parseFromString(html, "text/html");
+        let table = findTimesheetTable(doc);
+        let extracted = table ? extractTimesheetFromTable(table) : null;
+        return { doc, extracted };
     }
 
     // Initialize data fetching
     function fetchTimesheetData() {
         // If current page already has the timesheet table
-        let localTable = document.getElementById("DataTables_Table_0") || document.querySelector(".table-bordered");
-        if (localTable && localTable.getElementsByTagName("tr")[1]) {
-            let extracted = extractTimesheetFromRow(localTable.getElementsByTagName("tr")[1]);
+        let localTable = findTimesheetTable(document);
+        if (localTable) {
+            let extracted = extractTimesheetFromTable(localTable);
             if (extracted) {
                 saveTimesheetData(extracted);
                 return;
@@ -479,16 +633,35 @@
         fetch(reportUrl)
             .then((r) => r.text())
             .then((html) => {
-                let parser = new DOMParser();
-                let doc = parser.parseFromString(html, "text/html");
-                let fetchedTable = doc.querySelector(".table-bordered") || doc.getElementById("DataTables_Table_0");
-                if (fetchedTable && fetchedTable.getElementsByTagName("tr")[1]) {
-                    let extracted = extractTimesheetFromRow(fetchedTable.getElementsByTagName("tr")[1]);
-                    if (extracted) {
-                        saveTimesheetData(extracted);
-                        return;
-                    }
+                let { doc, extracted } = tryExtractFromHtml(html);
+                if (extracted) {
+                    saveTimesheetData(extracted);
+                    return;
                 }
+
+                // If view_report page was fetched, discover the user-specific generate_detailed_report/<id> URL
+                let detailedReportLink = doc.querySelector('a[href*="generate_detailed_report"]');
+                if (detailedReportLink && detailedReportLink.getAttribute("href")) {
+                    let hrefAttr = detailedReportLink.getAttribute("href");
+                    let fullUrl = hrefAttr.startsWith("http") ? hrefAttr : window.location.origin + (hrefAttr.startsWith("/") ? "" : "/") + hrefAttr;
+                    try {
+                        localStorage.setItem("ast_report_url", fullUrl);
+                    } catch (e) {}
+
+                    return fetch(fullUrl)
+                        .then((r2) => r2.text())
+                        .then((html2) => {
+                            let res = tryExtractFromHtml(html2);
+                            if (res.extracted) {
+                                saveTimesheetData(res.extracted);
+                                return;
+                            }
+                            if (!timesheetData.isLoaded) {
+                                renderUnavailable();
+                            }
+                        });
+                }
+
                 if (!timesheetData.isLoaded) {
                     renderUnavailable();
                 }
