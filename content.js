@@ -1,5 +1,5 @@
 // Tracking Work Hours Extension - Floating Widget
-// Version 1.1
+// Version 1.2
 
 (function () {
     // Exclude welcome/index and welcome/password pages
@@ -416,7 +416,7 @@
         let d = new Date(cleaned);
         if (!isNaN(d.getTime())) return d;
 
-        let parts = cleaned.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+        let parts = cleaned.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})\b/);
         if (parts) {
             let day = parseInt(parts[1], 10);
             let month = parseInt(parts[2], 10) - 1;
@@ -513,6 +513,7 @@
     function extractTimesheetFromTable(table) {
         if (!table) return null;
         let colMap = getTableColumnMap(table);
+        if (!colMap || colMap.date === -1 || colMap.in === -1) return null;
 
         let rows = table.querySelectorAll("tbody tr");
         if (!rows || rows.length === 0) {
@@ -523,9 +524,9 @@
         }
         if (!rows || rows.length === 0) return null;
 
-        let dateIdx = colMap && colMap.date >= 0 ? colMap.date : 1;
+        let dateIdx = colMap.date;
 
-        // 1. Search for row matching today's date
+        // Search strictly for row matching today's date
         for (let row of rows) {
             let tds = row.getElementsByTagName("td");
             if (tds && tds.length > dateIdx) {
@@ -536,12 +537,6 @@
             }
         }
 
-        // 2. Fall back to first valid data row
-        for (let row of rows) {
-            let extracted = extractTimesheetFromRow(row, colMap);
-            if (extracted) return extracted;
-        }
-
         return null;
     }
 
@@ -550,19 +545,10 @@
 
         let tables = root.querySelectorAll("table");
 
-        // Dynamic Header-based Discovery: table containing Date & In columns
+        // Dynamic Header-based Discovery: table MUST contain both Date & In columns
         for (let table of tables) {
             let colMap = getTableColumnMap(table);
             if (colMap && colMap.date !== -1 && colMap.in !== -1) {
-                return table;
-            }
-        }
-
-        // Fallback for legacy pages without explicit header tags: table with >= 7 columns
-        for (let table of tables) {
-            let ths = table.querySelectorAll("th");
-            let tds = table.querySelectorAll("td");
-            if (ths.length >= 7 || tds.length >= 7) {
                 return table;
             }
         }
@@ -571,7 +557,7 @@
     }
 
     function saveTimesheetData(data) {
-        if (!data) return;
+        if (!data || !isTodayDate(data.dateStr)) return;
         timesheetData = data;
         try {
             localStorage.setItem("ast_cached_timesheet", JSON.stringify({
@@ -586,23 +572,53 @@
     }
 
     function getDetailedReportUrl() {
-        if (window.location.pathname.includes("generate_detailed_report")) {
+        // 1. If currently on a detailed report page with employee ID
+        if (/\bgenerate_detailed_report\/\d+/.test(window.location.pathname)) {
             try {
                 localStorage.setItem("ast_report_url", window.location.href);
             } catch (e) {}
             return window.location.href;
         }
 
-        let linkEl = document.querySelector('a[href*="generate_detailed_report"]');
-        if (linkEl && linkEl.href && !linkEl.href.includes("javascript") && linkEl.href.startsWith("http")) {
+        // 2. If currently on a summary report page with employee ID, convert to detailed report
+        if (/\bgenerate_summary_report\/\d+/.test(window.location.pathname)) {
+            let detailedUrl = window.location.href.replace("generate_summary_report", "generate_detailed_report");
             try {
-                localStorage.setItem("ast_report_url", linkEl.href);
+                localStorage.setItem("ast_report_url", detailedUrl);
             } catch (e) {}
-            return linkEl.href;
+            return detailedUrl;
         }
 
+        // 3. Check for specific detailed report link with an employee ID in the current page
+        let linkEls = document.querySelectorAll('a[href*="generate_detailed_report"]');
+        for (let el of linkEls) {
+            let href = el.href || el.getAttribute("href") || "";
+            if (/\bgenerate_detailed_report\/\d+/.test(href) && !href.includes("javascript")) {
+                let fullUrl = href.startsWith("http") ? href : window.location.origin + (href.startsWith("/") ? "" : "/") + href;
+                try {
+                    localStorage.setItem("ast_report_url", fullUrl);
+                } catch (e) {}
+                return fullUrl;
+            }
+        }
+
+        // 4. Check for summary report link with an employee ID in current page
+        let summaryLinkEls = document.querySelectorAll('a[href*="generate_summary_report"]');
+        for (let el of summaryLinkEls) {
+            let href = el.href || el.getAttribute("href") || "";
+            if (/\bgenerate_summary_report\/\d+/.test(href) && !href.includes("javascript")) {
+                let fullUrl = href.startsWith("http") ? href : window.location.origin + (href.startsWith("/") ? "" : "/") + href;
+                let detailedUrl = fullUrl.replace("generate_summary_report", "generate_detailed_report");
+                try {
+                    localStorage.setItem("ast_report_url", detailedUrl);
+                } catch (e) {}
+                return detailedUrl;
+            }
+        }
+
+        // 5. Use previously cached valid detailed report URL if available
         let cached = localStorage.getItem("ast_report_url");
-        if (cached) {
+        if (cached && /\bgenerate_detailed_report\/\d+/.test(cached)) {
             return cached;
         }
 
@@ -640,15 +656,34 @@
                 }
 
                 // If view_report page was fetched, discover the user-specific generate_detailed_report/<id> URL
-                let detailedReportLink = doc.querySelector('a[href*="generate_detailed_report"]');
-                if (detailedReportLink && detailedReportLink.getAttribute("href")) {
-                    let hrefAttr = detailedReportLink.getAttribute("href");
-                    let fullUrl = hrefAttr.startsWith("http") ? hrefAttr : window.location.origin + (hrefAttr.startsWith("/") ? "" : "/") + hrefAttr;
+                let targetUrl = null;
+                let docDetailedLinks = doc.querySelectorAll('a[href*="generate_detailed_report"]');
+                for (let l of docDetailedLinks) {
+                    let hrefAttr = l.href || l.getAttribute("href") || "";
+                    if (/\bgenerate_detailed_report\/\d+/.test(hrefAttr)) {
+                        targetUrl = hrefAttr.startsWith("http") ? hrefAttr : window.location.origin + (hrefAttr.startsWith("/") ? "" : "/") + hrefAttr;
+                        break;
+                    }
+                }
+
+                if (!targetUrl) {
+                    let docSummaryLinks = doc.querySelectorAll('a[href*="generate_summary_report"]');
+                    for (let l of docSummaryLinks) {
+                        let hrefAttr = l.href || l.getAttribute("href") || "";
+                        if (/\bgenerate_summary_report\/\d+/.test(hrefAttr)) {
+                            let resolved = hrefAttr.startsWith("http") ? hrefAttr : window.location.origin + (hrefAttr.startsWith("/") ? "" : "/") + hrefAttr;
+                            targetUrl = resolved.replace("generate_summary_report", "generate_detailed_report");
+                            break;
+                        }
+                    }
+                }
+
+                if (targetUrl) {
                     try {
-                        localStorage.setItem("ast_report_url", fullUrl);
+                        localStorage.setItem("ast_report_url", targetUrl);
                     } catch (e) {}
 
-                    return fetch(fullUrl)
+                    return fetch(targetUrl)
                         .then((r2) => r2.text())
                         .then((html2) => {
                             let res = tryExtractFromHtml(html2);
